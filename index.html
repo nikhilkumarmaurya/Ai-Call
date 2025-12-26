@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AINIK AI - Voice Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            color: white; 
+            font-family: 'Inter', sans-serif; 
+            height: 100vh; 
+            overflow: hidden;
+        }
+
+        /* Pulsing Glow Effect */
+        .pulse-active {
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            background: #22c55e !important;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 40px rgba(34, 197, 94, 0); }
+            100% { transform: scale(.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 2rem;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between py-12 px-6">
+
+    <div class="text-center">
+        
+    </div>
+
+    <div class="flex flex-col items-center">
+        <button id="btn" onclick="listen()" class="relative w-44 h-44 bg-slate-800 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.5)] transition-all duration-300 hover:scale-105 active:scale-95 border-4 border-slate-700">
+            <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-20 w-20 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+        </button>
+        
+        <div id="status-container" class="mt-12 glass-card p-6 min-w-[280px] text-center">
+            <p id="msg" class="text-slate-300 text-lg font-medium leading-relaxed italic">
+                Tap to start speaking
+            </p>
+        </div>
+    </div>
+
+    <div class="text-slate-500 text-xs flex items-center gap-2">
+        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+        
+    </div>
+
+    <script>
+        // Note: Gemini 1.5 Flash is the latest stable version.
+        const API_KEY = 'You Gemini Api Key Here'; 
+        const MODEL = 'gemini-2.5-flash';
+
+        function listen() {
+            const rec = new (window.webkitSpeechRecognition || window.SpeechRecognition)();
+            rec.lang = 'hi-IN';
+            
+            const btn = document.getElementById('btn');
+            const msg = document.getElementById('msg');
+            const micIcon = document.getElementById('mic-icon');
+
+            rec.onstart = () => {
+                btn.classList.add('pulse-active');
+                micIcon.classList.remove('text-green-500');
+                micIcon.classList.add('text-white');
+                msg.innerText = "Listening...";
+                msg.classList.add('text-green-400');
+            };
+
+            rec.onresult = async (e) => {
+                const query = e.results[0][0].transcript;
+                msg.innerText = `"${query}"`;
+                msg.classList.remove('text-green-400');
+                await analyzeName(query);
+            };
+
+            rec.onerror = () => {
+                msg.innerText = "Could not hear you. Try again.";
+                btn.classList.remove('pulse-active');
+            }
+
+            rec.onend = () => {
+                btn.classList.remove('pulse-active');
+                micIcon.classList.add('text-green-500');
+                micIcon.classList.remove('text-white');
+            };
+
+            rec.start();
+        }
+
+        async function analyzeName(query) {
+            try {
+                // Ensure AndroidInterface exists
+                const names = (typeof AndroidInterface !== "undefined") ? AndroidInterface.getContactNames() : "Ram, Shyam, Rahul";
+                
+                const prompt = `User said: "${query}". Contacts: ${names}. Find the matching contact. Return ONLY the name.`;
+
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                const data = await res.json();
+                const bestMatch = data.candidates[0].content.parts[0].text.trim();
+
+                if (bestMatch && bestMatch.length > 0 && !bestMatch.includes("none")) {
+                    document.getElementById('msg').innerHTML = `<span class="text-green-400">Calling</span><br><b class="text-2xl">${bestMatch}</b>`;
+                    if(typeof AndroidInterface !== "undefined") AndroidInterface.dialByName(bestMatch);
+                } else {
+                    document.getElementById('msg').innerText = "Contact not found.";
+                }
+            } catch (err) {
+                document.getElementById('msg').innerText = "Connection Error";
+            }
+        }
+    </script>
+</body>
+</html>
